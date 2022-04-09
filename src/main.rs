@@ -4,7 +4,7 @@
 use cortex_m_rt::entry;
 use defmt::*;
 use defmt_rtt as _;
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::v2::{InputPin, OutputPin};
 use embedded_time::fixed_point::FixedPoint;
 use panic_probe as _;
 
@@ -62,6 +62,11 @@ fn main() -> ! {
     );
 
     let mut led_pin = pins.led.into_push_pull_output();
+    let col1 = pins.gpio19.into_pull_down_input();
+    let col2 = pins.gpio18.into_pull_down_input();
+    let mut row1 = pins.gpio2.into_push_pull_output();
+    let mut row2 = pins.gpio4.into_push_pull_output();
+    let mut row3 = pins.gpio3.into_push_pull_output();
 
     let usb_bus = UsbBus::new(
         pac.USBCTRL_REGS,
@@ -85,6 +90,7 @@ fn main() -> ! {
         .build();
 
     loop {
+        usb_dev.poll(&mut [&mut usb_hid]);
         // info!("on!");
         // led_pin.set_high().unwrap();
         // delay.delay_ms(500);
@@ -92,7 +98,38 @@ fn main() -> ! {
         // led_pin.set_low().unwrap();
         // delay.delay_ms(500);
 
+        led_pin.set_high().unwrap();
+        row1.set_high().unwrap();
+        delay.delay_ms(10);
+        if col1.is_high().ok().unwrap() {
+            info!("push key 1 !");
+        }
+        if col2.is_high().ok().unwrap() {
+            info!("push key 4 !");
+        }
+        row1.set_low().unwrap();
+
         usb_dev.poll(&mut [&mut usb_hid]);
+        row2.set_high().unwrap();
+        delay.delay_ms(10);
+        if col1.is_high().ok().unwrap() {
+            info!("push key 2 !");
+        }
+        if col2.is_high().ok().unwrap() {
+            info!("push key 5 !");
+        }
+        row2.set_low().unwrap();
+
+        usb_dev.poll(&mut [&mut usb_hid]);
+        row3.set_high().unwrap();
+        delay.delay_ms(10);
+        if col1.is_high().ok().unwrap() {
+            info!("push key 3 !");
+        }
+        if col2.is_high().ok().unwrap() {
+            info!("push key 6 !");
+        }
+        row3.set_low().unwrap();
     }
 }
 
