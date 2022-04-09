@@ -1,6 +1,3 @@
-//! Blinks the LED on a Pico board
-//!
-//! This will blink an LED attached to GP25, which is the pin the Pico uses for the on-board LED.
 #![no_std]
 #![no_main]
 
@@ -20,8 +17,20 @@ use bsp::hal::{
     clocks::{init_clocks_and_plls, Clock},
     pac,
     sio::Sio,
+    usb::UsbBus,
     watchdog::Watchdog,
 };
+
+// USB Device support
+use usb_device as usbd;
+// use usbd::{class_prelude::*, prelude::*};
+
+// USB Human Interface Device (HID) Class support
+// use usbd_hid::descriptor::generator_prelude::*;
+// use usbd_hid::descriptor::MouseReport;
+use usbd_hid::descriptor::SerializedDescriptor as _;
+// use usbd_hid::descriptor::KeyboardReport;
+// use usbd_hid::hid_class::HIDClass;
 
 #[entry]
 fn main() -> ! {
@@ -31,10 +40,8 @@ fn main() -> ! {
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
     let sio = Sio::new(pac.SIO);
 
-    // External high-speed crystal on the pico board is 12Mhz
-    let external_xtal_freq_hz = 12_000_000u32;
     let clocks = init_clocks_and_plls(
-        external_xtal_freq_hz,
+        bsp::XOSC_CRYSTAL_FREQ,
         pac.XOSC,
         pac.CLOCKS,
         pac.PLL_SYS,
@@ -56,13 +63,36 @@ fn main() -> ! {
 
     let mut led_pin = pins.led.into_push_pull_output();
 
+    let usb_bus = UsbBus::new(
+        pac.USBCTRL_REGS,
+        pac.USBCTRL_DPRAM,
+        clocks.usb_clock,
+        true,
+        &mut pac.RESETS,
+    );
+    let bus_allocator = usbd::class_prelude::UsbBusAllocator::new(usb_bus);
+    // let vid_pid = usbd_hid::hid_class::UsbVidPid(0x6666, 0x1234);
+    let vid_pid = usbd::device::UsbVidPid(0x3333, 0x0333);
+    let mut usb_hid = usbd_hid::hid_class::HIDClass::new(
+        &bus_allocator,
+        usbd_hid::descriptor::KeyboardReport::desc(),
+        60,
+    );
+    let mut usb_dev = usbd::device::UsbDeviceBuilder::new(&bus_allocator, vid_pid)
+        .manufacturer("mitsumaru company")
+        .product("pico-mute-key-board")
+        .serial_number("333")
+        .build();
+
     loop {
-        info!("on!");
-        led_pin.set_high().unwrap();
-        delay.delay_ms(500);
-        info!("off!");
-        led_pin.set_low().unwrap();
-        delay.delay_ms(500);
+        // info!("on!");
+        // led_pin.set_high().unwrap();
+        // delay.delay_ms(500);
+        // info!("off!");
+        // led_pin.set_low().unwrap();
+        // delay.delay_ms(500);
+
+        usb_dev.poll(&mut [&mut usb_hid]);
     }
 }
 
