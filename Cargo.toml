@@ -29,7 +29,7 @@ rp-pico = "0.3.0"
 usb-device= "0.2.8"
 usbd-hid = "0.5.2"
 # once_cell = "1.10.0"
-once_cell = {version = "1.10.0", default-features = false}
+once_cell = {version = "1.9.0", default-features = false}
 
 # cargo build/run
 [profile.dev]
