@@ -39,9 +39,9 @@ use usb_device as usbd;
 
 // USB Human Interface Device (HID) Class support
 // use usbd_hid::descriptor::generator_prelude::*;
+use usbd_hid::descriptor::KeyboardReport;
 use usbd_hid::descriptor::MouseReport;
 use usbd_hid::descriptor::SerializedDescriptor;
-// use usbd_hid::descriptor::KeyboardReport;
 // use usbd_hid::hid_class::HIDClass;
 
 /// The USB Device Driver (shared with the interrupt).
@@ -56,9 +56,14 @@ static mut USB_HID: Option<usbd_hid::hid_class::HIDClass<hal::usb::UsbBus>> = No
 static DELAY: Mutex<OnceCell<RefCell<Delay>>> = Mutex::new(OnceCell::new());
 #[doc(hidden)]
 fn delay_ms(ms: u32) {
-    let cs = unsafe { CriticalSection::new() };
-    let delay = &mut *DELAY.borrow(&cs).get().unwrap().borrow_mut();
-    delay.delay_ms(ms);
+    debug!("delay_ms {}", ms);
+    cortex_m::interrupt::free(|_| unsafe {
+        // Now interrupts are disabled, grab the global variable and, if
+        // available, send it a HID report
+        let cs = CriticalSection::new();
+        let delay = &mut *DELAY.borrow(&cs).get().unwrap().borrow_mut();
+        delay.delay_ms(ms);
+    });
 }
 
 #[entry]
@@ -81,8 +86,12 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
-
+    let delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
+    unsafe {
+        let cs = CriticalSection::new();
+        let global_delay = DELAY.borrow(&cs);
+        global_delay.set(RefCell::new(delay)).map_err(|_| 0);
+    }
     // usb setting
     let usb_bus = UsbBus::new(
         pac.USBCTRL_REGS,
@@ -98,7 +107,8 @@ fn main() -> ! {
     }
 
     let bus_ref = unsafe { USB_BUS.as_ref().unwrap() };
-    let usb_hid = usbd_hid::hid_class::HIDClass::new(bus_ref, MouseReport::desc(), 60);
+    // let usb_hid = usbd_hid::hid_class::HIDClass::new(bus_ref, MouseReport::desc(), 60);
+    let usb_hid = usbd_hid::hid_class::HIDClass::new(bus_ref, KeyboardReport::desc(), 60);
     unsafe {
         // Note (safety): This is safe as interrupts haven't been started yet.
         USB_HID = Some(usb_hid);
@@ -138,31 +148,33 @@ fn main() -> ! {
     let rows: [&mut DynPin; 3] = [&mut row1.into(), &mut row2.into(), &mut row3.into()];
     let cols: [&mut DynPin; 2] = [&mut col1.into(), &mut col2.into()];
 
-    // let mut key_scanner = KeyScanner::new(rows, cols, delay);
+    let mut key_scanner = KeyScanner::new(rows, cols);
     info!("loop start");
     loop {
-        // key_scanner.scan();
-        delay.delay_ms(100);
+        key_scanner.scan();
+        delay_ms(100);
 
-        let rep_up = MouseReport {
-            x: 0,
-            y: 1,
-            buttons: 0,
-            wheel: 0,
-            pan: 0,
-        };
-        push_mouse_movement(rep_up).ok().unwrap_or(0);
+        // debug!("mouse up");
+        // let rep_up = MouseReport {
+        //     x: 0,
+        //     y: 4,
+        //     buttons: 0,
+        //     wheel: 0,
+        //     pan: 0,
+        // };
+        // push_mouse_movement(rep_up).ok().unwrap_or(0);
 
-        delay.delay_ms(100);
+        // delay.delay_ms(100);
 
-        let rep_down = MouseReport {
-            x: 0,
-            y: -4,
-            buttons: 0,
-            wheel: 0,
-            pan: 0,
-        };
-        push_mouse_movement(rep_down).ok().unwrap_or(0);
+        // debug!("mouse down");
+        // let rep_down = MouseReport {
+        //     x: 0,
+        //     y: -4,
+        //     buttons: 0,
+        //     wheel: 0,
+        //     pan: 0,
+        // };
+        // push_mouse_movement(rep_down).ok().unwrap_or(0);
         // usb_dev.poll(&mut [&mut usb_hid]);
         // info!("on!");
         // led_pin.set_high().unwrap();
@@ -208,15 +220,10 @@ fn main() -> ! {
 struct KeyScanner<'a> {
     rows: [&'a mut DynPin; 3],
     cols: [&'a mut DynPin; 2],
-    delay: cortex_m::delay::Delay,
 }
 impl<'a> KeyScanner<'a> {
-    fn new(
-        rows: [&'a mut DynPin; 3],
-        cols: [&'a mut DynPin; 2],
-        delay: cortex_m::delay::Delay,
-    ) -> Self {
-        KeyScanner { rows, cols, delay }
+    fn new(rows: [&'a mut DynPin; 3], cols: [&'a mut DynPin; 2]) -> Self {
+        KeyScanner { rows, cols }
     }
     fn scan_matrix(&mut self) -> [[bool; 2]; 3] {
         let mut matrix = [[false; 2]; 3];
@@ -229,7 +236,7 @@ impl<'a> KeyScanner<'a> {
                     pin_row.set_low().unwrap();
                 }
             }
-            self.delay.delay_ms(5); // Wait a bit to propagete the voltage
+            delay_ms(5); // Wait a bit to propagete the voltage
             for (x, key) in row.iter_mut().enumerate() {
                 info!("push!!! x {}", x);
                 *key = self.cols[x].is_high().unwrap();
@@ -255,7 +262,7 @@ impl<'a> KeyScanner<'a> {
     }
 }
 pub fn push_mouse_movement(report: MouseReport) -> Result<usize, usb_device::UsbError> {
-    // debug!("push_mouse_movement");
+    debug!("push_mouse_movement");
     cortex_m::interrupt::free(|_| unsafe {
         // Now interrupts are disabled, grab the global variable and, if
         // available, send it a HID report
