@@ -6,6 +6,7 @@
         "keycodes",
         "leds",
         "plls",
+        "rustfmt",
         "usbd",
         "XOSC",
         "xtal"
