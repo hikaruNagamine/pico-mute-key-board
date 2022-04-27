@@ -5,8 +5,10 @@
     "cSpell.words": [
         "keycodes",
         "leds",
+        "NVIC",
         "plls",
         "rustfmt",
+        "USBCTRL",
         "usbd",
         "XOSC",
         "xtal"
