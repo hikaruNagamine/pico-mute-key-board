@@ -6,7 +6,7 @@ use cortex_m_rt::entry;
 use defmt::*;
 use defmt_rtt as _;
 use embedded_hal::digital::v2::{InputPin, OutputPin};
-// use embedded_time::fixed_point::FixedPoint;
+use embedded_time::fixed_point::FixedPoint;
 use panic_probe as _;
 
 use bsp::hal;
@@ -75,20 +75,20 @@ fn main() -> ! {
         sio.gpio_bank0,
         &mut pac.RESETS,
     );
-    // let mut led_pin = pins.led.into_push_pull_output();
+    let mut led_pin = pins.led.into_push_pull_output();
     // output
     let row1 = pins.gpio2.into_pull_up_input();
     let row2 = pins.gpio4.into_pull_up_input();
     let row3 = pins.gpio3.into_pull_up_input();
     // input
-    let mut col1 = pins.gpio19.into_push_pull_output();
-    let mut col2 = pins.gpio18.into_push_pull_output();
+    let col1 = pins.gpio19.into_push_pull_output();
+    let col2 = pins.gpio18.into_push_pull_output();
 
-    // let rows: [&mut DynPin; 3] = [&mut row1.into(), &mut row2.into(), &mut row3.into()];
-    // let cols: [&mut DynPin; 2] = [&mut col1.into(), &mut col2.into()];
+    let rows: [&mut DynPin; 3] = [&mut row1.into(), &mut row2.into(), &mut row3.into()];
+    let cols: [&mut DynPin; 2] = [&mut col1.into(), &mut col2.into()];
 
-    // let mut key_scanner = KeyScanner::new(rows, cols);
-    // let mut last_keycodes = [0u8; 6];
+    let mut key_scanner = KeyScanner::new(rows, cols);
+    let mut last_keycodes = [0u8; 6];
 
     // let core = pac::CorePeripherals::take().unwrap();
     // let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
@@ -99,52 +99,33 @@ fn main() -> ! {
         keycodes: [0x00, 0, 0, 0, 0, 0],
     };
     info!("Loop Start!");
-    let mut count = 0;
+    // let mut count = 0;
 
-    col1.set_low().unwrap();
-    col2.set_high().unwrap();
-    asm::delay(1000);
+    // col1.set_low().unwrap();
+    // col2.set_high().unwrap();
+    // asm::delay(1000);
 
     loop {
-        // usb_dev.poll(&mut [&mut usb_hid]);
-        count += 1;
-        if row1.is_low().unwrap() {
-            info!("low!");
+        usb_dev.poll(&mut [&mut usb_hid]);
+        // count += 1;
+        let key_repo = key_scanner.scan();
+        if last_keycodes != key_repo.keycodes {
+            // debug!(
+            //     "change keycodes!!! {},{},{},{},{},{}",
+            //     key_repo.keycodes[0],
+            //     key_repo.keycodes[1],
+            //     key_repo.keycodes[2],
+            //     key_repo.keycodes[3],
+            //     key_repo.keycodes[4],
+            //     key_repo.keycodes[5]
+            // );
+            led_pin.set_high().unwrap();
+            usb_hid.push_input(&key_repo).ok();
+            last_keycodes = key_repo.keycodes;
+        } else {
+            led_pin.set_low().unwrap();
+            // usb_hid.push_input(&init_key_repo).ok();
         }
-        if row2.is_low().unwrap() {
-            info!("low2!");
-        }
-        if row3.is_low().unwrap() {
-            info!("low3!");
-        }
-        // info!(
-        //     "loop {} : {},{},{},{},{},{}",
-        //     count,
-        //     last_keycodes[0],
-        //     last_keycodes[1],
-        //     last_keycodes[2],
-        //     last_keycodes[3],
-        //     last_keycodes[4],
-        //     last_keycodes[5]
-        // );
-        // let key_repo = key_scanner.scan();
-        // if last_keycodes != key_repo.keycodes {
-        //     debug!(
-        //         "change keycodes!!! {},{},{},{},{},{}",
-        //         key_repo.keycodes[0],
-        //         key_repo.keycodes[1],
-        //         key_repo.keycodes[2],
-        //         key_repo.keycodes[3],
-        //         key_repo.keycodes[4],
-        //         key_repo.keycodes[5]
-        //     );
-        //     // led_pin.set_high().unwrap();
-        //     usb_hid.push_input(&key_repo).ok();
-        //     last_keycodes = key_repo.keycodes;
-        // } else {
-        //     // led_pin.set_low().unwrap();
-        //     usb_hid.push_input(&init_key_repo).ok();
-        // }
         // drop received data
         // usb_hid.pull_raw_output(&mut [0; 64]).ok();
     }
@@ -185,11 +166,11 @@ impl<'a> KeyScanner<'a> {
             }
             asm::delay(1000); // Wait a bit to propagate the voltage
             for (x, key) in row.iter_mut().enumerate() {
-                info!("y{},x{}", y, x);
+                // info!("y{},x{}", y, x);
                 *key = self.rows[x].is_low().unwrap();
-                if self.rows[x].is_low().unwrap() {
-                    info!("low!{}", x);
-                }
+                // if self.rows[x].is_low().unwrap() {
+                // info!("low!{}", x);
+                // }
             }
         }
         matrix
@@ -208,7 +189,7 @@ impl<'a> KeyScanner<'a> {
                 }
                 let key = KEY_MAP[y][x];
                 if next_keycode_index < key_codes.len() {
-                    info!("push! [{}][{}]", key, next_keycode_index);
+                    // info!("push! [{}][{}]", key, next_keycode_index);
                     key_codes[next_keycode_index] = key;
                     next_keycode_index += 1;
                 }
